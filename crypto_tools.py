@@ -54,8 +54,8 @@ def get_top_coins(top_n=30):
     coin_tickers = [coin_ticker + '-USD' for coin_ticker in top30_tickers]
     coin_labels = [coin_ticker + '_USD' for coin_ticker in top30_tickers]
     
-    tickers = ['^GSPC','^DJI','^NDX','USDT-USD','USDC-USD','USDT-KRW','USDC-KRW','KRW=X','MSTR','GLD']
-    names = ['SP500','DJI','ND100','USDTUSD','USDCUSD','USDTKRW','USDCKRW','USDKRW','MSTR','GLD']
+    tickers = ['^GSPC','^DJI','^NDX','USDT-USD','USDC-USD','USDT-KRW','USDC-KRW','KRW=X','SGD=X','MSTR','GLD']
+    names = ['SP500','DJI','ND100','USDTUSD','USDCUSD','USDTKRW','USDCKRW','USDKRW','USDSGD','MSTR','GLD']
     tickers = tickers + coin_tickers
     names = names + coin_labels
     ticker_dict = dict(zip(tickers,names))
@@ -91,6 +91,10 @@ def long_query(query_func, start_date, end_date, exchange, symbol, defaultType='
         # to epoch
         start_date = to_epoch(start_date)
         query_df = query_func(exchange, symbol, nobs=max_data_len, start=start_date, freq=time_step, defaultType=defaultType)
+        # if query_df == None:
+        #     print('nothing returned')
+        #     pass
+        # else:
         query_df_list.append(query_df)
         # to datetime
         start_date = to_date(start_date)
@@ -110,23 +114,28 @@ def long_query(query_func, start_date, end_date, exchange, symbol, defaultType='
     return long_query_df
 
 def get_prices(exchange, symbol, nobs, start, defaultType, freq='8h'):
-    inst = getattr(ccxt, exchange)({
-        'enableRateLimit': True,
-        'options': {
-            'defaultType': f'{defaultType}',
-            'adjustForTimeDifference': True
+    inst = getattr(ccxt, exchange)(
+            {
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': f'{defaultType}',
+                'adjustForTimeDifference': True
+            }
         }
-    })
+    )
     try:
-        df = pd.DataFrame(inst.fetchOHLCV(symbol,
+        df = pd.DataFrame(inst.fetch_ohlcv(symbol,
                                           since=start,
                                           timeframe=freq,
                                           limit=nobs))
     except:
-        df = pd.DataFrame(inst.fetchOHLCV(symbol,
+        df = pd.DataFrame(inst.fetch_ohlcv(symbol,
                                           since=start,
                                           limit=nobs))
-        
+    # if df.shape[0] == 0:
+    #     print(df.shape[0])
+    #     return None
+    # else:
     df.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
     df = df.set_index('time').sort_index()
     df.index = pd.to_datetime(df.index, unit='ms').round('60min')
@@ -136,19 +145,31 @@ def get_prices(exchange, symbol, nobs, start, defaultType, freq='8h'):
 
 
 def get_funding_rates(exchange, symbol, nobs, start, defaultType='future', freq='8h'):
-    inst = getattr(ccxt, exchange)({
-        'enableRateLimit': True,
-        'options': {
-            'defaultType': f'{defaultType}',
-            'adjustForTimeDifference': True
+    inst = getattr(ccxt, exchange)(
+            {
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': f'{defaultType}',
+                'adjustForTimeDifference': True
+            }
         }
-    })
+    )
     df = pd.DataFrame(inst.fetchFundingRateHistory(symbol=symbol, 
                                                    since=start,
                                                    limit=nobs))
     df = df[['symbol','fundingRate','datetime']]
     df.datetime = pd.to_datetime(df.datetime, utc=True).round('60min')
     df = df.set_index('datetime').sort_index()
+    
+    return df
+
+def get_ohlcv(exchange, symbol, frequency='1m'):
+    inst = getattr(ccxt, exchange)()
+    ohlcv = inst.fetch_ohlcv(symbol=symbol, timeframe=frequency)
+    df = pd.DataFrame(ohlcv, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
+    pd_ts = pd.to_datetime(df['datetime'], utc=True, unit='ms')
+    df.set_index(pd_ts, inplace=True)
+    df = df[['open', 'high', 'low', 'close', 'volume']]
     
     return df
 
@@ -168,12 +189,12 @@ def get_cd_crypto_index(start_date_str, end_date_str):
     return data_df
 
 
-def plot_corr_mat(returns, ax=None):
+def plot_corr_mat(returns, ax=None, annot=False):
     corr_mat = returns.dropna().corr()
     
     mask = np.zeros_like(corr_mat, dtype=bool)
     mask[np.triu_indices_from(mask)] = True
-    sns.heatmap(corr_mat, cmap='coolwarm', mask=mask, annot=False, cbar=False, ax=ax);
+    sns.heatmap(corr_mat, cmap='coolwarm', mask=mask, annot=annot, cbar=False, ax=ax);
     
     return corr_mat
     
@@ -193,7 +214,7 @@ def rolling_reg(returns, y_asset, X_factors, window):
     
     return model
 
-def vectorized_beta(returns, market_definition='ETH'):
+def vectorized_beta(returns, market_definition='ETH_USD'):
     market = returns[market_definition]
     assets = returns
     # Calculate betas for all assets
@@ -205,7 +226,7 @@ def vectorized_beta(returns, market_definition='ETH'):
 
     return betas
 
-def vectorized_corr(returns, market_definition='ETH'):
+def vectorized_corr(returns, market_definition='ETH_USD'):
     # Calculate corrs for all assets
     corrs = returns.corr().loc[:, market_definition]
     corrs.index.name = 'symbol'
@@ -219,9 +240,9 @@ def filter_outliers(ser, lower_percentile=0.01, upper_percentile=0.99):
     return filtered_ser
 
 def standardize(ser):
-    return (ser - ser.mean()) / ser.std()
+    return (ser[-1] - ser.mean()) / ser.std()
     
-def vectorized_rolling_calc(returns, market_definition='ETH', window_size=30, beta=True):
+def vectorized_rolling_calc(returns, market_definition='ETH_USD', window_size=30, beta=True):
     rolling_list = []
     for w in returns.rolling(window=window_size, min_periods=window_size):
         if w.shape[0] < window_size:
