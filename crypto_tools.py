@@ -90,6 +90,7 @@ def long_query(query_func, start_date, end_date, exchange, symbol, defaultType='
         end_date = start_date + pd.Timedelta(max_data_len * freq_hr, "hr")
         # to epoch
         start_date = to_epoch(start_date)
+        print(time_step)
         query_df = query_func(exchange, symbol, nobs=max_data_len, start=start_date, freq=time_step, defaultType=defaultType)
         # if query_df == None:
         #     print('nothing returned')
