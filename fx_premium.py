@@ -40,7 +40,7 @@ def get_yf_prices():
     tickers = tickers
     names = names
     ticker_dict = dict(zip(tickers,names))    
-    prices = yf.download(tickers, interval='1d', period='max', progress=False)['Adj Close'].rename(columns=ticker_dict)
+    prices = yf.download(tickers, interval='1d', period='max', progress=False)['Close'].rename(columns=ticker_dict)
     
     return prices
 
@@ -153,7 +153,18 @@ def get_fx_premium(regex='^pct_.*_krw$', window=10):
         'summ_rank': rank_df.mean(axis=1)
         
     }
-    print(f'% premium: {summ_ser.iloc[-1] :0.2f}%')
-    print(f'% rank: {rank_df.mean(axis=1).iloc[-1] :0.2f} / 100%')
+
+    binance_swap_rate = stablecoin_fx_pairs.binance_usdc_usdt.iloc[-1]
+    upbit_swap_rate = stablecoin_fx_pairs.upbit_usdt_krw.iloc[-1]
+    final_swap_rate = binance_swap_rate * upbit_swap_rate
+    fx_swap_rate = stablecoin_fx_pairs.USDKRW.iloc[-1]
+    print(f'binance USDC/USDT: 1 USDC: {binance_swap_rate :0.4f} USDT')
+    print(f'upbit USDT/KRW: 1 USDT: {upbit_swap_rate :0.4f} KRW')
+    print(f'USDC > binance USDT > upbit KRW swap rate: 1 USDC: {final_swap_rate :0.4f} KRW')
+    print(f'fx USD/KRW: 1 USD: {fx_swap_rate :0.4f} KRW')
+    print(f'fx premium amt: 1 USDC: {final_swap_rate - fx_swap_rate :0.4f} KRW (final premium: {100 * (final_swap_rate/fx_swap_rate - 1) :0.2f}%)')
+
+    print(f'\n% avg premium: {summ_ser.iloc[-1] :0.2f}%')
+    print(f'% avg rank: {rank_df.mean(axis=1).iloc[-1] :0.2f} / 100%')
     
     return output_dict
