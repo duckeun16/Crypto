@@ -61,7 +61,7 @@ def get_top_coins(top_n=30):
     ticker_dict = dict(zip(tickers,names))
     print(ticker_dict)
     
-    prices = yf.download(tickers, interval='1d', period='max')['Adj Close'].rename(columns=ticker_dict)
+    prices = yf.download(tickers, interval='1d', period='max')['Close'].rename(columns=ticker_dict)
     return prices
 
 def long_query(query_func, start_date, end_date, exchange, symbol, defaultType='future', freq_hr=8, max_data_len=1500, mute=True):
